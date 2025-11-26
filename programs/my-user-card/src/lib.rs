@@ -12,9 +12,25 @@ pub mod user_card_program {
         ctx: Context<InitializeUserCard>,
         card_type: CardType,
         amount_paid: u64,
-        tokens_minted: u64,
     ) -> Result<()> {
-        // Transfer the amount_paid from authority to user_card account
+        // 1. PRICE Logic
+        let expected_price: u64 = match card_type {
+            CardType::Bronze => 125_000_000,     // 0.125 SOL
+            CardType::Silver => 250_000_000,     // 0.25 SOL
+            CardType::Gold => 500_000_000,       // 0.5 SOL
+            CardType::Platinum => 1_000_000_000, // 1 SOL
+        };
+
+        // 2. Validation: Check if amount_paid is sufficient
+        if amount_paid < expected_price {
+            return Err(ErrorCode::InsufficientPayment.into());
+        }
+
+        // 3. Calculation (Internal Source of Truth)
+        // Jitne SOL diye, utne hi tokens milenge (1:1 Ratio)
+        let tokens_to_mint: u64 = amount_paid;
+
+        // --- SOL TRANSFER ---
         let cpi_context = CpiContext::new(
             ctx.accounts.system_program.to_account_info(),
             system_program::Transfer {
@@ -23,15 +39,15 @@ pub mod user_card_program {
             },
         );
 
-        // SOL transfer
+        // Transfer the amount_paid from authority to user_card account
         msg!(
             "Transferring {} lamports from authority to user_card account",
             amount_paid
         );
         system_program::transfer(cpi_context, amount_paid)?;
 
+        // --- TOKEN MINTING ---
         let bump = ctx.bumps.user_card;
-
         let signer_seeds: &[&[&[u8]]] = &[&[
             b"user_card",                        // seed
             ctx.accounts.authority.key.as_ref(), // user ki public key
@@ -50,14 +66,15 @@ pub mod user_card_program {
         );
 
         // Mint tokens
-        msg!("Minting {} tokens to user's token account", tokens_minted);
-        token::mint_to(cpi_ctx, tokens_minted)?;
+        msg!("Minting {} tokens to user's token account", tokens_to_mint);
+        token::mint_to(cpi_ctx, tokens_to_mint)?;
 
+        // --- DATA SAVING ---
         let acct = &mut ctx.accounts.user_card;
         acct.owner = ctx.accounts.authority.key();
         acct.card_type = card_type;
         acct.amount_paid = amount_paid;
-        acct.tokens_minted = tokens_minted;
+        acct.tokens_minted = tokens_to_mint;
         acct.status = AccountStatus::Active;
         Ok(())
     }
@@ -146,4 +163,7 @@ pub enum AccountStatus {
 pub enum ErrorCode {
     #[msg("Unauthorized")]
     Unauthorized,
+
+    #[msg("Insufficient payment for selected card type")]
+    InsufficientPayment,
 }
