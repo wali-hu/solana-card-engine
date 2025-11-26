@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use anchor_lang::system_program;
 
 declare_id!("9PznwD37XbYGLsDPfrxumNBBUY1HeBPb4uneRkX3r8vM");
 
@@ -12,6 +13,18 @@ pub mod user_card_program {
         amount_paid: u64,
         tokens_minted: u64,
     ) -> Result<()> {
+
+        // Transfer the amount_paid from authority to user_card account
+        let cpi_context = CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            system_program::Transfer {
+                from: ctx.accounts.authority.to_account_info(),
+                to: ctx.accounts.user_card.to_account_info(),
+            },
+        );
+
+        system_program::transfer(cpi_context, amount_paid)?;
+
         let acct = &mut ctx.accounts.user_card;
         acct.owner = ctx.accounts.authority.key();
         acct.card_type = card_type;
