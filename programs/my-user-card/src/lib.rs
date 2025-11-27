@@ -88,7 +88,7 @@ pub mod user_card_program {
         // Validation: Kya account mein itne paise hain?
         let current_balance = user_card.to_account_info().lamports();
         if current_balance < amount {
-             return Err(ErrorCode::InsufficientFunds.into());
+            return Err(ErrorCode::InsufficientFunds.into());
         }
 
         let user_balance = user_card.to_account_info().lamports();
@@ -108,7 +108,7 @@ pub mod user_card_program {
         msg!("Withdraw success! Sent {} lamports to admin.", amount);
         Ok(())
     }
-
+    
 }
 
 #[derive(Accounts)]
@@ -151,14 +151,13 @@ pub struct WithdrawFunds<'info> {
     pub admin: Signer<'info>,
 }
 
-
 #[account]
 pub struct UserCardAccount {
-    pub owner: Pubkey,         // 32 bytes
-    pub card_type: CardType,   // enum
-    pub amount_paid: u64,      // 8 bytes
-    pub tokens_minted: u64,    // 8 bytes
-    //pub status: AccountStatus, // enum
+    pub owner: Pubkey,       // 32 bytes
+    pub card_type: CardType, // enum
+    pub amount_paid: u64,    // 8 bytes
+    pub tokens_minted: u64,  // 8 bytes
+                             //pub status: AccountStatus, // enum
 }
 
 impl UserCardAccount {
