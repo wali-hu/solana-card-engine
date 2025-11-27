@@ -108,7 +108,6 @@ pub mod user_card_program {
         msg!("Withdraw success! Sent {} lamports to admin.", amount);
         Ok(())
     }
-    
 }
 
 #[derive(Accounts)]
