@@ -4,6 +4,8 @@ use anchor_spl::token;
 
 declare_id!("9PznwD37XbYGLsDPfrxumNBBUY1HeBPb4uneRkX3r8vM");
 
+const ADMIN_PUBKEY: &str = "Fskji1sm9H8QwZBGmuRTTie6B111RhCfLtbALMaNRkt";
+
 #[program]
 pub mod user_card_program {
     use super::*;
@@ -75,23 +77,38 @@ pub mod user_card_program {
         acct.card_type = card_type;
         acct.amount_paid = amount_paid;
         acct.tokens_minted = tokens_to_mint;
-        acct.status = AccountStatus::Active;
+        //acct.status = AccountStatus::Active;
         Ok(())
     }
 
-    // Example: upgrade card (simple)
-    pub fn upgrade_card(ctx: Context<ModifyCard>, new_type: CardType) -> Result<()> {
-        let acct = &mut ctx.accounts.user_card;
-        acct.card_type = new_type;
+    pub fn withdraw_funds(ctx: Context<WithdrawFunds>, amount: u64) -> Result<()> {
+        let user_card = &ctx.accounts.user_card;
+        let admin = &ctx.accounts.admin;
+
+        // Validation: Kya account mein itne paise hain?
+        let current_balance = user_card.to_account_info().lamports();
+        if current_balance < amount {
+             return Err(ErrorCode::InsufficientFunds.into());
+        }
+
+        let user_balance = user_card.to_account_info().lamports();
+        let new_user_balance = user_balance
+            .checked_sub(amount)
+            .ok_or(ErrorCode::InsufficientFunds)?;
+
+        let admin_balance = admin.to_account_info().lamports();
+        let new_admin_balance = admin_balance
+            .checked_add(amount)
+            .ok_or(ErrorCode::ArithmeticError)?;
+
+        // ⚠️ TRANSFER LOGIC
+        **user_card.to_account_info().try_borrow_mut_lamports()? = new_user_balance;
+        **admin.to_account_info().try_borrow_mut_lamports()? = new_admin_balance;
+
+        msg!("Withdraw success! Sent {} lamports to admin.", amount);
         Ok(())
     }
 
-    // Example: deactivate
-    pub fn deactivate(ctx: Context<ModifyCard>) -> Result<()> {
-        let acct = &mut ctx.accounts.user_card;
-        acct.status = AccountStatus::Inactive;
-        Ok(())
-    }
 }
 
 #[derive(Accounts)]
@@ -123,12 +140,17 @@ pub struct InitializeUserCard<'info> {
 }
 
 #[derive(Accounts)]
-pub struct ModifyCard<'info> {
-    #[account(mut, has_one = owner @ ErrorCode::Unauthorized)]
+pub struct WithdrawFunds<'info> {
+    #[account(mut)]
     pub user_card: Account<'info, UserCardAccount>,
 
-    pub owner: Signer<'info>,
+    #[account(
+        mut,
+        address = ADMIN_PUBKEY.parse::<Pubkey>().unwrap() @ ErrorCode::Unauthorized
+    )]
+    pub admin: Signer<'info>,
 }
+
 
 #[account]
 pub struct UserCardAccount {
@@ -136,7 +158,7 @@ pub struct UserCardAccount {
     pub card_type: CardType,   // enum
     pub amount_paid: u64,      // 8 bytes
     pub tokens_minted: u64,    // 8 bytes
-    pub status: AccountStatus, // enum
+    //pub status: AccountStatus, // enum
 }
 
 impl UserCardAccount {
@@ -153,11 +175,11 @@ pub enum CardType {
     Platinum,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq, Debug)]
-pub enum AccountStatus {
-    Active,
-    Inactive,
-}
+// #[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq, Debug)]
+// pub enum AccountStatus {
+//     Active,
+//     Inactive,
+// }
 
 #[error_code]
 pub enum ErrorCode {
@@ -166,4 +188,10 @@ pub enum ErrorCode {
 
     #[msg("Insufficient payment for selected card type")]
     InsufficientPayment,
+
+    #[msg("Insufficient funds in user card account")]
+    InsufficientFunds,
+
+    #[msg("Arithmetic Overflow/Underflow")]
+    ArithmeticError,
 }
